@@ -19,7 +19,7 @@ TOKEN_EXPIRATION_HOURS = 3600
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Or specify allowed origins like ["https://yourdomain.com"]
+    allow_origins=["https://wave.coignac.fr"],  # Or specify allowed origins like ["https://yourdomain.com"]
     allow_credentials=True,
     allow_methods=["*"],  # Or restrict methods like ["GET", "POST"]
     allow_headers=["*"],  # Or restrict headers like ["Content-Type", "Authorization"]
@@ -41,7 +41,9 @@ def generate_token(response: Response):
         "exp": expiration}, SECRET_KEY, algorithm=ALGORITHM)
     tokens[token] = expiration
     # use Set-Cookie header to store the token in the browser
-    response.set_cookie(key="token", value=token, expires=TOKEN_EXPIRATION_HOURS)
+    response.set_cookie(key="token", value=token, expires=TOKEN_EXPIRATION_HOURS,httponly=True,
+    secure=True,  # Assure-toi que la connexion est HTTPS
+    samesite="none")
     return None
 
 
