@@ -19,7 +19,7 @@ TOKEN_EXPIRATION_HOURS = 3600
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://wave.coignac.fr","https://wave-api-6rqq.onrender.com"],  # Or specify allowed origins like ["https://yourdomain.com"]
+    allow_origins=["*"],  # Or specify allowed origins like ["https://yourdomain.com"]
     allow_credentials=True,
     allow_methods=["*"],  # Or restrict methods like ["GET", "POST"]
     allow_headers=["*"],  # Or restrict headers like ["Content-Type", "Authorization"]
@@ -35,23 +35,22 @@ class ImageRequest(BaseModel):
 
 # Generate a temporary token
 @app.get("/generate-token")
-def generate_token(response: Response):
+def generate_token():
     expiration = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRATION_HOURS)
     token = jwt.encode({
         "exp": expiration}, SECRET_KEY, algorithm=ALGORITHM)
     tokens[token] = expiration
-    # use Set-Cookie header to store the token in the browser
-    response.set_cookie(key="token",
-                        value=token,
-                        expires=expiration,
-                        httponly=True,
-                        samesite="none")
-    return None
+    return {"token": token, "expiration": expiration}
 
 
 # Validate a token
-def validate_token(token: str = Cookie(...)):
+def validate_token(authorization: str = Header(...)):
     try:
+        print(authorization)
+        # Extract the token from the "Authorization" header
+        if not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Invalid token format")
+        token = authorization[len("Bearer "):]
         jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         if token not in tokens or tokens[token] < datetime.utcnow():
             raise HTTPException(status_code=401, detail="Token expired or invalid")
@@ -64,7 +63,7 @@ def validate_token(token: str = Cookie(...)):
 @app.post("/detect-target")
 def detect_target(
         request: ImageRequest,
-        token: str = Depends(validate_token)
+        authorization: str = Depends(validate_token)
 ):
     try:
         # Decode the base64 image string
