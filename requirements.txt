@@ -4,3 +4,4 @@ fastapi==0.115.6
 python-jose==3.3.0
 pydantic==2.10.4
 ultralytics==8.3.55
+uvicorn==0.34.0
