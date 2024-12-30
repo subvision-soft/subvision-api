@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Header, Depends, Response
 from fastapi.params import Cookie
 from jose import jwt, JWTError
 from pydantic import BaseModel
-
+from fastapi.middleware.cors import CORSMiddleware
 from target_detection import get_sheet_coordinates
 
 # Constants
@@ -17,11 +17,21 @@ ALGORITHM = "HS256"
 TOKEN_EXPIRATION_HOURS = 3600
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Or specify allowed origins like ["https://yourdomain.com"]
+    allow_credentials=True,
+    allow_methods=["*"],  # Or restrict methods like ["GET", "POST"]
+    allow_headers=["*"],  # Or restrict headers like ["Content-Type", "Authorization"]
+)
 
 # Temporary token storage (for demo purposes)
 tokens = {}
+
+
 class ImageRequest(BaseModel):
     image_data: str
+
 
 # Generate a temporary token
 @app.get("/generate-token")
