@@ -1,61 +1,69 @@
-from fastapi import FastAPI, HTTPException, Header, Depends
-from jose import jwt, JWTError
-from datetime import datetime, timedelta
-import secrets
 import base64
-import numpy as np
+import secrets
+from datetime import datetime, timedelta
+
 import cv2
-import io
+import numpy as np
+from fastapi import FastAPI, HTTPException, Header, Depends, Response
+from fastapi.params import Cookie
+from jose import jwt, JWTError
+from pydantic import BaseModel
+
+from target_detection import get_sheet_coordinates
 
 # Constants
 SECRET_KEY = secrets.token_urlsafe(32)
 ALGORITHM = "HS256"
-TOKEN_EXPIRATION_MINUTES = 30
+TOKEN_EXPIRATION_HOURS = 3600
 
 app = FastAPI()
 
 # Temporary token storage (for demo purposes)
 tokens = {}
+class ImageRequest(BaseModel):
+    image_data: str
 
 # Generate a temporary token
-@app.post("/generate-token")
-def generate_token():
-    expiration = datetime.utcnow() + timedelta(minutes=TOKEN_EXPIRATION_MINUTES)
-    token = jwt.encode({"exp": expiration}, SECRET_KEY, algorithm=ALGORITHM)
+@app.get("/generate-token")
+def generate_token(response: Response):
+    expiration = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRATION_HOURS)
+    token = jwt.encode({
+        "exp": expiration}, SECRET_KEY, algorithm=ALGORITHM)
     tokens[token] = expiration
-    return {"token": token, "expires_in": TOKEN_EXPIRATION_MINUTES}
+    # use Set-Cookie header to store the token in the browser
+    response.set_cookie(key="token", value=token, expires=TOKEN_EXPIRATION_HOURS)
+    return None
+
 
 # Validate a token
-def validate_token(authorization: str = Header(...)):
+def validate_token(token: str = Cookie(...)):
     try:
-        # Extract the token from the "Authorization" header
-        if not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Invalid token format")
-        token = authorization[len("Bearer "):]
         jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         if token not in tokens or tokens[token] < datetime.utcnow():
             raise HTTPException(status_code=401, detail="Token expired or invalid")
-    except JWTError:
+    except JWTError as e:
+        print(e)
         raise HTTPException(status_code=401, detail="Invalid token")
 
+
 # Endpoint to process the image
-@app.post("/process-image")
-def process_image(
-    image_data: bytes,
-    authorization: str = Depends(validate_token)
+@app.post("/detect-target")
+def detect_target(
+        request: ImageRequest,
+        token: str = Depends(validate_token)
 ):
     try:
-        # Convert raw bytes into an image (e.g., if it's base64 encoded)
-
-        decoded_data = base64.b64decode(image_data)
-        # Convert bytes data to a NumPy array
+        # Decode the base64 image string
+        decoded_data = base64.b64decode(request.image_data)
+        # Convert bytes to NumPy array
         np_array = np.frombuffer(decoded_data, dtype=np.uint8)
-
-        # Decode the NumPy array into an image using OpenCV
+        # Decode the image using OpenCV
         image = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
+        # save the image to disk
+        cv2.imwrite("image.jpg", image)
+        if image is None:
+            raise ValueError("Invalid image format.")
         # Perform your image processing here
-
-
-        return {"message": "Image processed successfully"}
+        return get_sheet_coordinates(image)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")
