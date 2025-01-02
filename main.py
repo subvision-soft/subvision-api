@@ -13,15 +13,12 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from target_detection import get_sheet_coordinates, process_image
 import socket
-import ssl
 # Constants
 SECRET_KEY = secrets.token_urlsafe(32)
 ALGORITHM = "HS256"
 TOKEN_EXPIRATION_HOURS = 3600
 
 app = FastAPI()
-ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-ssl_context.load_cert_chain('cert.pem', keyfile='key.pem')
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Or specify allowed origins like ["https://yourdomain.com"]
