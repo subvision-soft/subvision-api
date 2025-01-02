@@ -27,32 +27,6 @@ app.add_middleware(
     allow_headers=["*"],  # Or restrict headers like ["Content-Type", "Authorization"]
 )
 
-
-def get_local_ip():
-    # Try to connect to a remote host to get the correct local IP
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.settimeout(0)
-
-    try:
-        # Connect to an external address to determine the local network IP
-        s.connect(('10.254.254.254', 1))  # The IP doesn't matter
-        local_ip = s.getsockname()[0]  # Get the local IP address
-    except Exception:
-        local_ip = '127.0.0.1'  # Default to localhost if there’s an issue
-    finally:
-        s.close()
-
-    return local_ip
-
-print(f"Access the FastAPI app at: https://{get_local_ip()}:8001")
-#print a qrcode for easy access
-import qrcode
-qr = qrcode.QRCode(border=1)
-qr.add_data(f"https://{get_local_ip()}:8001")
-qr.make(fit=True)
-qrcode_ascii = qr.print_ascii(invert=True)
-
-
 # Temporary token storage (for demo purposes)
 tokens = {}
 
