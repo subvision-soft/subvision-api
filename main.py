@@ -1,5 +1,6 @@
 import base64
 import secrets
+import traceback
 from datetime import datetime, timedelta
 
 import cv2
@@ -46,7 +47,6 @@ def generate_token():
 # Validate a token
 def validate_token(authorization: str = Header(...)):
     try:
-        print(authorization)
         # Extract the token from the "Authorization" header
         if not authorization.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="Invalid token format")
@@ -77,8 +77,14 @@ def detect_target(
         if image is None:
             raise ValueError("Invalid image format.")
         # Perform your image processing here
-        return get_sheet_coordinates(image)
+        # benchmarking
+        start = datetime.now()
+        coordinates = get_sheet_coordinates(image)
+        print(f"Time taken: {datetime.now() - start}")
+        return coordinates
     except Exception as e:
+        # trace the error
+        print(traceback.format_exc())
         raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")
 
 @app.post("/target-score")

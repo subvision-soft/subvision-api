@@ -1,24 +1,27 @@
 import math
 from enum import Enum
-import timeit
 from typing import Sequence
 import base64
 import cv2
 import numpy as np
-from ultralytics import YOLO
 import os
+
+from yoloseg.YOLOSeg import YOLOSeg
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 from numpy import ndarray
 
 Ellipse = tuple[Sequence[float], Sequence[float], float]
+
+
 class Zone(Enum):
     TOP_LEFT = 1
     TOP_RIGHT = 2
     BOTTOM_LEFT = 3
     BOTTOM_RIGHT = 4
     CENTER = 5
+
 
 class Impact:
     def __init__(self, distance: int, score: int, zone: Zone, angle: float, amount: int):
@@ -30,7 +33,7 @@ class Impact:
 
 
 PICTURE_SIZE_SHEET_DETECTION = 1000
-model = YOLO("nano_semantic_model.pt")
+yolo_v8 = YOLOSeg("nano_semantic_model.onnx", conf_thres=0.5)
 
 
 def to_radians(angle):
@@ -172,12 +175,12 @@ def coordinates_to_percentage(coordinates, width, height):
 
 def get_sheet_coordinates(sheet_mat: ndarray):
     mat_resized = cv2.resize(sheet_mat.copy(), (PICTURE_SIZE_SHEET_DETECTION, PICTURE_SIZE_SHEET_DETECTION))
-    results = model.track(mat_resized, verbose=False, conf=0.5)
-    if results[0].masks is not None:
+    boxes, scores, _, masks = yolo_v8(mat_resized)
+    if masks is not None and len(masks) > 0:
         # get index of best detection
-        best_detection_index = np.argsort(results[0].boxes.conf)[-1:]
-        mask = results[0].masks.data.cpu().numpy()[best_detection_index]
-        # Convert mask to 8-bit single-channel image
+        best_detection_index = np.argsort(scores)[-1:]
+        print(best_detection_index)
+        mask = masks[best_detection_index[0]]
         mask = (mask * 255).astype(np.uint8)
         mask = cv2.resize(mask, (PICTURE_SIZE_SHEET_DETECTION, PICTURE_SIZE_SHEET_DETECTION))
         contours, _ = cv2.findContours(mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
@@ -221,7 +224,7 @@ def percentage_to_coordinates(percentage_coordinates, width, height):
     return coordinates
 
 
-def get_sheet_picture(image: ndarray)->ndarray:
+def get_sheet_picture(image: ndarray) -> ndarray:
     coordinates = get_sheet_coordinates(image)
     if coordinates is None:
         return None
@@ -257,13 +260,13 @@ def get_crop_coordinates(image: ndarray, target_zone: Zone):
     return {'x1': x1, 'x2': x2, 'y1': y1, 'y2': y2}
 
 
-def get_target_picture(sheet_mat: ndarray, target_zone: Zone)->ndarray:
+def get_target_picture(sheet_mat: ndarray, target_zone: Zone) -> ndarray:
     sheet_mat_clone = sheet_mat.copy()
     coordinates = get_crop_coordinates(sheet_mat_clone, target_zone)
     return sheet_mat_clone[coordinates['x1']:coordinates['x2'], coordinates['y1']:coordinates['y2']]
 
 
-def get_impacts_mask(image: ndarray)->ndarray:
+def get_impacts_mask(image: ndarray) -> ndarray:
     image = cv2.blur(image.copy(), (PICTURE_SIZE_SHEET_DETECTION // 100, PICTURE_SIZE_SHEET_DETECTION // 100))
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     h, saturation, v = cv2.split(hsv)
@@ -312,7 +315,7 @@ def get_color_mask(mat: ndarray, color: tuple):
     return mask
 
 
-def get_target_ellipse(mat)->Ellipse:
+def get_target_ellipse(mat) -> Ellipse:
     circle = np.zeros((mat.shape[1], mat.shape[0]), dtype=np.uint8)
     cv2.circle(circle, (mat.shape[1] // 2, mat.shape[0] // 2), int(mat.shape[1] / 2.2), (255, 255, 255), -1)
 
@@ -353,7 +356,7 @@ def get_target_ellipse(mat)->Ellipse:
     return ellipse
 
 
-def get_targets_ellipse(image: ndarray)->dict[Zone, Ellipse]:
+def get_targets_ellipse(image: ndarray) -> dict[Zone, Ellipse]:
     zones = [Zone.TOP_LEFT, Zone.TOP_RIGHT, Zone.CENTER, Zone.BOTTOM_LEFT, Zone.BOTTOM_RIGHT]
     ellipsis = {}
     for zone in zones:
@@ -383,7 +386,7 @@ def target_coordinates_to_sheet_coordinates(ellipsis: dict):
     return new_ellipsis
 
 
-def process_image(image: ndarray)->tuple[bytes, list[Impact]] or None:
+def process_image(image: ndarray) -> tuple[bytes, list[Impact]] or None:
     sheet_mat = get_sheet_picture(image)
     if sheet_mat is None:
         return None
@@ -472,7 +475,6 @@ def process_image(image: ndarray)->tuple[bytes, list[Impact]] or None:
             3
         )
         points.append(Impact(real_distance, score, closest_zone, rad_angle, 1))
-
 
     # Encode the image to PNG format
     _, buffer = cv2.imencode('.png', sheet_mat)
