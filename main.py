@@ -5,19 +5,23 @@ from datetime import datetime, timedelta
 
 import cv2
 import numpy as np
+import uvicorn
 from fastapi import FastAPI, HTTPException, Header, Depends, Response
 from fastapi.params import Cookie
 from jose import jwt, JWTError
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from target_detection import get_sheet_coordinates, process_image
-
+import socket
+import ssl
 # Constants
 SECRET_KEY = secrets.token_urlsafe(32)
 ALGORITHM = "HS256"
 TOKEN_EXPIRATION_HOURS = 3600
 
 app = FastAPI()
+ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+ssl_context.load_cert_chain('cert.pem', keyfile='key.pem')
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Or specify allowed origins like ["https://yourdomain.com"]
@@ -25,6 +29,32 @@ app.add_middleware(
     allow_methods=["*"],  # Or restrict methods like ["GET", "POST"]
     allow_headers=["*"],  # Or restrict headers like ["Content-Type", "Authorization"]
 )
+
+
+def get_local_ip():
+    # Try to connect to a remote host to get the correct local IP
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(0)
+
+    try:
+        # Connect to an external address to determine the local network IP
+        s.connect(('10.254.254.254', 1))  # The IP doesn't matter
+        local_ip = s.getsockname()[0]  # Get the local IP address
+    except Exception:
+        local_ip = '127.0.0.1'  # Default to localhost if there’s an issue
+    finally:
+        s.close()
+
+    return local_ip
+
+print(f"Access the FastAPI app at: https://{get_local_ip()}:8001")
+#print a qrcode for easy access
+import qrcode
+qr = qrcode.QRCode(border=1)
+qr.add_data(f"https://{get_local_ip()}:8001")
+qr.make(fit=True)
+qrcode_ascii = qr.print_ascii(invert=True)
+
 
 # Temporary token storage (for demo purposes)
 tokens = {}
@@ -72,8 +102,7 @@ def detect_target(
         np_array = np.frombuffer(decoded_data, dtype=np.uint8)
         # Decode the image using OpenCV
         image = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
-        # save the image to disk
-        cv2.imwrite("image.jpg", image)
+
         if image is None:
             raise ValueError("Invalid image format.")
         # Perform your image processing here
@@ -107,3 +136,15 @@ def target_score(
         return process_image(image)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")
+
+
+
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        log_level="info",
+
+    )

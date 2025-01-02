@@ -16,11 +16,12 @@ Ellipse = tuple[Sequence[float], Sequence[float], float]
 
 
 class Zone(Enum):
-    TOP_LEFT = 1
-    TOP_RIGHT = 2
-    BOTTOM_LEFT = 3
-    BOTTOM_RIGHT = 4
-    CENTER = 5
+    TOP_LEFT = 'TOP_LEFT'
+    TOP_RIGHT = 'TOP_RIGHT'
+    BOTTOM_LEFT = 'BOTTOM_LEFT'
+    BOTTOM_RIGHT = 'BOTTOM_RIGHT'
+    CENTER = 'CENTER'
+    UNDEFINED = 'UNDEFINED'
 
 
 class Impact:
@@ -38,6 +39,9 @@ yolo_v8 = YOLOSeg("nano_semantic_model.onnx", conf_thres=0.5)
 
 def to_radians(angle):
     return angle * math.pi / 180
+
+def to_degrees(angle):
+    return angle * 180 / math.pi
 
 
 def rotate_point(center, point, angle):
@@ -245,13 +249,13 @@ def get_crop_coordinates(image: ndarray, target_zone: Zone):
     height, width, _ = image.shape
     x1, x2, y1, y2 = 0, width, 0, height
 
-    if target_zone in [Zone.TOP_RIGHT, Zone.BOTTOM_RIGHT]:
-        x1 = int(width / 2)
     if target_zone in [Zone.BOTTOM_LEFT, Zone.BOTTOM_RIGHT]:
+        x1 = int(width / 2)
+    if target_zone in [Zone.TOP_RIGHT, Zone.BOTTOM_RIGHT]:
         y1 = int(height / 2)
-    if target_zone in [Zone.TOP_LEFT, Zone.BOTTOM_LEFT]:
-        x2 = int(width / 2)
     if target_zone in [Zone.TOP_LEFT, Zone.TOP_RIGHT]:
+        x2 = int(width / 2)
+    if target_zone in [Zone.TOP_LEFT, Zone.BOTTOM_LEFT]:
         y2 = int(height / 2)
     if target_zone == Zone.CENTER:
         x1, y1 = int(width / 4), int(height / 4)
@@ -371,9 +375,9 @@ def target_coordinates_to_sheet_coordinates(ellipsis: dict):
 
         if key == Zone.TOP_LEFT:
             new_ellipsis[key] = (value[0], value[1], value[2])
-        elif key == Zone.TOP_RIGHT:
-            new_ellipsis[key] = ((value[0][0], value[0][1] + PICTURE_SIZE_SHEET_DETECTION // 2), value[1], value[2])
         elif key == Zone.BOTTOM_LEFT:
+            new_ellipsis[key] = ((value[0][0], value[0][1] + PICTURE_SIZE_SHEET_DETECTION // 2), value[1], value[2])
+        elif key == Zone.TOP_RIGHT:
             new_ellipsis[key] = ((value[0][0] + PICTURE_SIZE_SHEET_DETECTION // 2, value[0][1]), value[1], value[2])
         elif key == Zone.BOTTOM_RIGHT:
             new_ellipsis[key] = (
@@ -474,60 +478,22 @@ def process_image(image: ndarray) -> tuple[bytes, list[Impact]] or None:
             [255, 255, 255, 255],
             3
         )
-        points.append(Impact(real_distance, score, closest_zone, rad_angle, 1))
+        points.append(Impact(real_distance, score, closest_zone, to_degrees(rad_angle) + 180, 1))
 
     # Encode the image to PNG format
     _, buffer = cv2.imencode('.png', sheet_mat)
     # Convert the buffer to a base64 string
     base64_string = base64.b64encode(buffer.tobytes()).decode('utf-8')
     # Add the MIME type prefix
-    return f"data:image/png;base64,{base64_string}", points
-#
-# image = cv2.imread('images/sheet.jpg')
-# numruns = 10
-# duration = timeit.Timer('process_image(image)', globals=globals()).timeit(numruns)
-# print(f"Duration: {duration / numruns:.2f} seconds")
-# sheet_mat, coordinates = process_image(image)
-# if sheet_mat is not None:
-#     plt.imshow(sheet_mat)
-#     plt.show()
-# cv2.waitKey()
-#
-# cap = cv2.VideoCapture("./test.mp4")
-# while not cap.isOpened():
-#     cap = cv2.VideoCapture("./test.mp4")
-#     cv2.waitKey(1000)
-#     print("Wait for the header")
-#
-# pos_frame = cap.get(cv2.CAP_PROP_POS_FRAMES)
-# # get video duration
-# fps = cap.get(cv2.CAP_PROP_FPS)
-# print(f"Frames per second using video.get(cv2.CAP_PROP_FPS) : {fps}")
-# frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-# duration = frame_count / fps
-# print(f"Duration: {duration:.2f} seconds")
-#
-#
-# def method_name():
-#     global pos_frame, sheet_mat, coordinates
-#     while True:
-#         flag, frame = cap.read()
-#         if flag:
-#             try:
-#                 sheet_mat, coordinates = process_image(frame)
-#                 if sheet_mat is not None:
-#                     cv2.imshow('Sheet', sheet_mat)
-#             except Exception as e:
-#                 pass
-#             if cv2.waitKey(10) & 0xFF == ord('q'):
-#                 break
-#         else:
-#             cap.set(cv2.CAP_PROP_POS_FRAMES, pos_frame - 1)
-#             print("frame is not ready")
-#             cv2.waitKey(1000)
-#         if cap.get(cv2.CAP_PROP_POS_FRAMES) == cap.get(cv2.CAP_PROP_FRAME_COUNT):
-#             print("End of video")
-#             break
-#
-# duration = timeit.Timer('method_name()', globals=globals()).timeit(1)
-# print(f"Duration: {duration / 1:.2f} seconds")
+    return {
+        'image':f"data:image/png;base64,{base64_string}",'impacts': points}
+
+# main function
+if __name__ == '__main__':
+    image = cv2.imread("image.jpg")
+
+    while True:
+        process_image(image)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
