@@ -1,4 +1,6 @@
 import base64
+import json
+import os
 import secrets
 import traceback
 from datetime import datetime, timedelta
@@ -7,12 +9,19 @@ import cv2
 import numpy as np
 import uvicorn
 from fastapi import FastAPI, HTTPException, Header, Depends, Response
-from fastapi.params import Cookie
 from jose import jwt, JWTError
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from target_detection import get_sheet_coordinates, process_image
+
+from notion_client import Client
+
+notion_token = os.environ.get('NOTION_TOKEN')
+
+notion_database_id = os.environ.get('NOTION_DATABASE_ID')
+
 import socket
+
 # Constants
 SECRET_KEY = secrets.token_urlsafe(32)
 ALGORITHM = "HS256"
@@ -21,10 +30,10 @@ TOKEN_EXPIRATION_HOURS = 3600
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Or specify allowed origins like ["https://yourdomain.com"]
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Or restrict methods like ["GET", "POST"]
-    allow_headers=["*"],  # Or restrict headers like ["Content-Type", "Authorization"]
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Temporary token storage (for demo purposes)
@@ -87,6 +96,56 @@ def detect_target(
         print(traceback.format_exc())
         raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")
 
+
+@app.get("/news")
+def get_news():
+    # Initialize the Notion client
+    client = Client(auth=notion_token)
+
+    # Get the database
+    db_rows = client.databases.query(database_id=notion_database_id)
+    write_dict_to_file_as_json(db_rows, 'news.json')
+    results = []
+    for row in db_rows['results']:
+        title = safe_get(row, 'properties.Titre.title.0.text.content')
+        string_date = safe_get(row, 'properties.Date.date.start')
+        date = datetime.strptime(string_date, '%Y-%m-%d')
+        description = safe_get(row, 'properties.Description.rich_text.0.text.content')
+        illustration = safe_get(row, 'properties.Illustration.files.0.file.url')
+        results.append({
+            'title': title,
+            'date': date,
+            'description': description,
+            'illustration': illustration
+        })
+
+    return results
+
+
+def write_dict_to_file_as_json(content, file_name):
+    content_as_json_str = json.dumps(content)
+
+    with open(file_name, 'w') as f:
+        f.write(content_as_json_str)
+
+
+def safe_get(data, dot_chained_keys):
+    '''
+        {'a': {'b': [{'c': 1}]}}
+        safe_get(data, 'a.b.0.c') -> 1
+    '''
+    keys = dot_chained_keys.split('.')
+    for key in keys:
+        try:
+            if isinstance(data, list):
+                data = data[int(key)]
+            else:
+                data = data[key]
+        except (KeyError, TypeError, IndexError):
+            return None
+    return data
+
+
 @app.post("/target-score")
 def target_score(
         request: ImageRequest,
@@ -109,13 +168,8 @@ def target_score(
         raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")
 
 
-
-
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",
         port=8000,
-        log_level="info",
-
     )
