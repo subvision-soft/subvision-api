@@ -27,6 +27,9 @@ SECRET_KEY = secrets.token_urlsafe(32)
 ALGORITHM = "HS256"
 TOKEN_EXPIRATION_HOURS = 3600
 
+# Le cache à l'ancienne :)
+news_cache = None
+
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -97,36 +100,59 @@ def detect_target(
         raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")
 
 
-@app.get("/news")
-def get_news():
+
+def extract_news(notion_json):
+    extracted_data = []
+    for item in notion_json.get("results", []):
+        properties = item.get("properties", {})
+
+        title = properties.get("Titre", {}).get("title", [])
+        title_text = title[0]["plain_text"] if title else ""
+
+        date = properties.get("Date", {}).get("date", {}).get("start", "")
+        date_obj = datetime.strptime(date, "%Y-%m-%d").date() if date else None
+
+        illustration_files = properties.get("Illustration", {}).get("files", [])
+        illustration = illustration_files[0]["file"]["url"] if illustration_files else ""
+
+        description_rich_text = properties.get("Description", {}).get("rich_text", [])
+        description_html = "".join([
+            f"<b>{t['text']['content']}</b>" if t["annotations"]["bold"] else
+            f"<i>{t['text']['content']}</i>" if t["annotations"]["italic"] else
+            t["text"]["content"]
+            for t in description_rich_text
+        ]).replace("\n", "<br>")
+
+        extracted_data.append({
+            "title": title_text,
+            "date": date_obj,
+            "illustration": illustration,
+            "description": description_html
+        })
+
+    return extracted_data
+
+def fetch_news():
     # Initialize the Notion client
     client = Client(auth=notion_token)
 
     # Get the database
     db_rows = client.databases.query(database_id=notion_database_id)
-    write_dict_to_file_as_json(db_rows, 'news.json')
-    results = []
-    for row in db_rows['results']:
-        title = safe_get(row, 'properties.Titre.title.0.text.content')
-        string_date = safe_get(row, 'properties.Date.date.start')
-        date = datetime.strptime(string_date, '%Y-%m-%d')
-        description = safe_get(row, 'properties.Description.rich_text.0.text.content')
-        illustration = safe_get(row, 'properties.Illustration.files.0.file.url')
-        results.append({
-            'title': title,
-            'date': date,
-            'description': description,
-            'illustration': illustration
-        })
+    notion_data = json.loads(json.dumps(db_rows))  # Replace with actual JSON
+    parsed_data = extract_news(notion_data)
 
-    return results
+    return {
+        "timestamp": datetime.now(),
+        "data": parsed_data
+    }
 
-
-def write_dict_to_file_as_json(content, file_name):
-    content_as_json_str = json.dumps(content)
-
-    with open(file_name, 'w') as f:
-        f.write(content_as_json_str)
+@app.get("/news")
+def get_news():
+    global news_cache
+    # Check if the cache is empty or expired
+    if news_cache is None or datetime.now() - news_cache["timestamp"] > timedelta(minutes=5):
+        news_cache = fetch_news()
+    return news_cache["data"]
 
 
 def safe_get(data, dot_chained_keys):
