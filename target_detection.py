@@ -34,11 +34,14 @@ class Impact:
 
 
 PICTURE_SIZE_SHEET_DETECTION = 1000
+KERNEL_SIZE = (PICTURE_SIZE_SHEET_DETECTION // 200, PICTURE_SIZE_SHEET_DETECTION // 200)
+ROUND_KERNEL = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, KERNEL_SIZE)
 yolo_v8 = YOLOSeg("nano_semantic_model.onnx", conf_thres=0.5)
 
 
 def to_radians(angle):
     return angle * math.pi / 180
+
 
 def to_degrees(angle):
     return angle * 180 / math.pi
@@ -67,14 +70,13 @@ def get_point_on_ellipse(ellipse, angle):
     radius_x, radius_y = radii
     x = center[0] + math.cos(angle) * (radius_x / 2)
     y = center[1] + math.sin(angle) * (radius_y / 2)
-    rotated_point = rotate_point(center, (x, y), to_radians(ellipse_angle) + to_radians(180))
     # Convert the coordinates to integers
-    return (int(x), int(y))
+    return int(x), int(y)
 
 
 def grow_ellipse(ellipse, factor):
     center, radii, angle = ellipse
-    return (center, (radii[0] * factor, radii[1] * factor), angle)
+    return center, (radii[0] * factor, radii[1] * factor), angle
 
 
 def get_distance(point1, point2):
@@ -121,7 +123,7 @@ def draw_cross_at_coordinates(image: np.ndarray, coordinates: list, color: tuple
 
         # Draw horizontal line of the cross
         # check if the line is in the image
-        if x - size >= 0 and x + size < image.shape[1] and y >= 0 and y < image.shape[0]:
+        if x - size >= 0 and x + size < image.shape[1] and 0 <= y < image.shape[0]:
             cv2.line(image, (x - size, y), (x + size, y), color, width)
             # Draw vertical line of the cross
             cv2.line(image, (x, y - size), (x, y + size), color, width)
@@ -183,7 +185,6 @@ def get_sheet_coordinates(sheet_mat: ndarray):
     if masks is not None and len(masks) > 0:
         # get index of best detection
         best_detection_index = np.argsort(scores)[-1:]
-        print(best_detection_index)
         mask = masks[best_detection_index[0]]
         mask = (mask * 255).astype(np.uint8)
         mask = cv2.resize(mask, (PICTURE_SIZE_SHEET_DETECTION, PICTURE_SIZE_SHEET_DETECTION))
@@ -202,19 +203,6 @@ def get_sheet_coordinates(sheet_mat: ndarray):
     return None
 
 
-def extract_sheet(image):
-    kernel = np.ones((5, 5), np.uint8)
-    img = cv2.morphologyEx(image, cv2.MORPH_CLOSE, kernel, iterations=3)
-    mask = np.zeros(img.shape[:2], np.uint8)
-    bgdModel = np.zeros((1, 65), np.float64)
-    fgdModel = np.zeros((1, 65), np.float64)
-    rect = (20, 20, img.shape[1] - 20, img.shape[0] - 20)
-    cv2.grabCut(img, mask, rect, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_RECT)
-    mask2 = np.where((mask == 2) | (mask == 0), 0, 1).astype('uint8')
-    img = img * mask2[:, :, np.newaxis]
-    return img
-
-
 def draw_sheet_detection_contour(image, coordinates):
     coordinates_len = len(coordinates)
     for i in range(coordinates_len):
@@ -228,7 +216,7 @@ def percentage_to_coordinates(percentage_coordinates, width, height):
     return coordinates
 
 
-def get_sheet_picture(image: ndarray) -> ndarray:
+def get_sheet_picture(image: ndarray) -> ndarray or None:
     coordinates = get_sheet_coordinates(image)
     if coordinates is None:
         return None
@@ -271,7 +259,8 @@ def get_target_picture(sheet_mat: ndarray, target_zone: Zone) -> ndarray:
 
 
 def get_impacts_mask(image: ndarray) -> ndarray:
-    image = cv2.blur(image.copy(), (PICTURE_SIZE_SHEET_DETECTION // 100, PICTURE_SIZE_SHEET_DETECTION // 100))
+    # image = cv2.blur(image.copy(), (PICTURE_SIZE_SHEET_DETECTION // 200, PICTURE_SIZE_SHEET_DETECTION // 200))
+    image = image.copy()
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     h, saturation, v = cv2.split(hsv)
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(saturation)
@@ -284,11 +273,16 @@ def get_impacts_mask(image: ndarray) -> ndarray:
     high = np.full((saturation.shape[0], saturation.shape[1]), upper_bound, dtype=np.uint8)
 
     cv2.inRange(saturation, low, high, saturation)
-
+    # remove noise
+    saturation = cv2.morphologyEx(saturation, cv2.MORPH_OPEN, ROUND_KERNEL, iterations=1)
+    _, saturation = cv2.threshold(saturation, 127, 255, cv2.THRESH_BINARY)
     contours, hierarchy = cv2.findContours(saturation, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    ellipsis = [cv2.fitEllipse(contour) for contour in contours]
     # create a mask image that contains the contour filled in
     mask = np.zeros_like(saturation)  # Create mask where white is what we want, black otherwise
-    cv2.drawContours(mask, contours, -1, 255, -1)  # Draw filled contour in mask
+    # get ellipses centers
+    for ellipse in ellipsis:
+        cv2.ellipse(mask, ellipse, (255, 255, 255), -1)
     return mask
 
 
@@ -324,37 +318,51 @@ def get_target_ellipse(mat) -> Ellipse:
     cv2.circle(circle, (mat.shape[1] // 2, mat.shape[0] // 2), int(mat.shape[1] / 2.2), (255, 255, 255), -1)
 
     kernel_size = PICTURE_SIZE_SHEET_DETECTION // 200
-    kernel = np.ones((kernel_size, kernel_size), dtype=np.float32)
+    ksize = (kernel_size, kernel_size)
     hsv = cv2.cvtColor(mat.copy(), cv2.COLOR_BGR2HSV)
     hsv_channels = cv2.split(hsv)
     value = hsv_channels[2]
 
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(value)
-    max_val = (max_val - min_val) / 2 + min_val
+    value = cv2.bitwise_not(value)
+
+    min_val, max_val, _, _ = cv2.minMaxLoc(value)
+    min_val = max_val - (max_val - min_val) / 1.5
 
     min_mat = np.full((value.shape[0], value.shape[1]), min_val, dtype=value.dtype)
     high_mat = np.full((value.shape[0], value.shape[1]), max_val, dtype=value.dtype)
     value_mask = cv2.inRange(value, min_mat, high_mat)
+
     cv2.bitwise_and(value_mask, circle, value_mask)
 
     impacts = get_impacts_mask(mat)
     # remove impacts from the mask
     cv2.bitwise_and(value_mask, cv2.bitwise_not(impacts), value_mask)
-
-    close = cv2.morphologyEx(value_mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
-    close = cv2.morphologyEx(close, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+    close = cv2.morphologyEx(value_mask, cv2.MORPH_CLOSE, ROUND_KERNEL)
+    close = cv2.morphologyEx(close, cv2.MORPH_OPEN, ROUND_KERNEL)
     contours, _ = cv2.findContours(close, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     biggest_contour = max(contours, key=cv2.contourArea)
     ellipse = cv2.fitEllipse(biggest_contour)
-    for i in range(10):
+    for i in range(5):
         empty = np.zeros(mat.shape, dtype=np.uint8)
         cv2.ellipse(empty, ellipse, (255, 255, 255), -1)
         empty_gray = cv2.cvtColor(empty, cv2.COLOR_BGR2GRAY)
         xor = cv2.bitwise_xor(empty_gray, close)
-        cv2.bitwise_or(close, xor, xor)
-        contours, _ = cv2.findContours(xor, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        close = cv2.bitwise_or(close, xor)
+        contours, _ = cv2.findContours(close, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         biggest_contour = max(contours, key=cv2.contourArea)
         ellipse = cv2.fitEllipse(biggest_contour)
+        if ellipse[1][0] < ellipse[1][1] * 0.7 or ellipse[1][0] > ellipse[1][1] * 1.3:
+            raise ValueError('Problem during visual detection')
+    for i in range(5):
+        empty = np.zeros(mat.shape, dtype=np.uint8)
+        cv2.ellipse(empty, ellipse, (255, 255, 255), -1)
+        empty_gray = cv2.cvtColor(empty, cv2.COLOR_BGR2GRAY)
+        close = cv2.bitwise_and(close, empty_gray, close)
+        contours, _ = cv2.findContours(close, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        mat_copy = mat.copy()
+        biggest_contour = max(contours, key=cv2.contourArea)
+        ellipse = cv2.fitEllipse(biggest_contour)
+        cv2.ellipse(mat_copy, ellipse, (0, 255, 0), 1)
         if ellipse[1][0] < ellipse[1][1] * 0.7 or ellipse[1][0] > ellipse[1][1] * 1.3:
             raise ValueError('Problem during visual detection')
     return ellipse
@@ -394,43 +402,33 @@ def process_image(image: ndarray) -> tuple[bytes, list[Impact]] or None:
     sheet_mat = get_sheet_picture(image)
     if sheet_mat is None:
         return None
-    coordinates = get_targets_ellipse(sheet_mat)
-    coordinates = target_coordinates_to_sheet_coordinates(coordinates)
+    targets_ellipsis = get_targets_ellipse(sheet_mat)
+    targets_ellipsis = target_coordinates_to_sheet_coordinates(targets_ellipsis)
     impacts = get_impacts_coordinates(sheet_mat)
 
-    # iterate key and value
-    for key, ellipse_contrat in coordinates.items():
-        drawing_width = 2
-
-        # Draw the ellipse
-        target_color = (0, 255, 0)
-        # Grow the ellipse
-        ellipse_cross_tip = grow_ellipse(ellipse_contrat, 2.2)
-        ellipse_mouche = grow_ellipse(ellipse_contrat, 0.2)
-        ellipse_petit_blanc = grow_ellipse(ellipse_contrat, 0.6)
-        ellipse_moyen_blanc = grow_ellipse(ellipse_contrat, 1.4)
-        ellipse_grand_blanc = grow_ellipse(ellipse_contrat, 1.8)
-        # Draw the ellipses
-        cv2.ellipse(sheet_mat, ellipse_contrat, target_color, drawing_width)
-        cv2.ellipse(sheet_mat, ellipse_mouche, target_color, drawing_width)
-        cv2.ellipse(sheet_mat, ellipse_petit_blanc, target_color, drawing_width)
-        cv2.ellipse(sheet_mat, ellipse_moyen_blanc, target_color, drawing_width)
-        cv2.ellipse(sheet_mat, ellipse_grand_blanc, target_color, drawing_width)
-
-        top_point = get_point_on_ellipse(ellipse_cross_tip, to_radians(90))
-        bottom_point = get_point_on_ellipse(ellipse_cross_tip, to_radians(270))
-        left_point = get_point_on_ellipse(ellipse_cross_tip, to_radians(180))
-        right_point = get_point_on_ellipse(ellipse_cross_tip, to_radians(0))
-        cv2.line(sheet_mat, top_point, bottom_point, target_color, drawing_width)
-        cv2.line(sheet_mat, left_point, right_point, target_color, drawing_width)
+    draw_targets(targets_ellipsis, sheet_mat)
 
     draw_cross_at_coordinates(sheet_mat, impacts, color=(0, 165, 255), width=3)
     points: list[Impact] = []
+    draw_and_get_impacts_points(impacts, points, sheet_mat, targets_ellipsis)
+
+    # Encode the image to PNG format
+    _, buffer = cv2.imencode('.png', sheet_mat)
+    # Convert the buffer to a base64 string
+    base64_string = base64.b64encode(buffer.tobytes()).decode('utf-8')
+
+    return {
+        'image': f"data:image/png;base64,{base64_string}",
+        'impacts': points
+    }
+
+
+def draw_and_get_impacts_points(impacts, points, sheet_mat, targets_ellipsis):
     for impact in impacts:
         min_distance = float('inf')
         closest_zone = None
 
-        for key, coordinate in coordinates.items():
+        for key, coordinate in targets_ellipsis.items():
             distance = get_distance(impact, coordinate[0])
             if min_distance > distance:
                 min_distance = distance
@@ -439,22 +437,22 @@ def process_image(image: ndarray) -> tuple[bytes, list[Impact]] or None:
         if closest_zone is None:
             raise ValueError('Aucune zone trouvée')
 
-        rad_angle = get_angle(impact, coordinates[closest_zone][0])
+        rad_angle = get_angle(impact, targets_ellipsis[closest_zone][0])
         angle = rad_angle + to_radians(360)
-        ellipse_angle = to_radians(coordinates[closest_zone][2] + 360)
+        ellipse_angle = to_radians(targets_ellipsis[closest_zone][2] + 360)
         angle = angle - ellipse_angle
         point_on_ellipse = get_point_on_ellipse(
-            coordinates[closest_zone],
+            targets_ellipsis[closest_zone],
             angle
         )
         point_on_ellipse = rotate_point(
-            coordinates[closest_zone][0],
+            targets_ellipsis[closest_zone][0],
             point_on_ellipse,
             ellipse_angle + to_radians(180)
         )
 
         real_distance = get_real_distance(
-            coordinates[closest_zone][0],
+            targets_ellipsis[closest_zone][0],
             point_on_ellipse,
             impact
         )
@@ -480,20 +478,30 @@ def process_image(image: ndarray) -> tuple[bytes, list[Impact]] or None:
         )
         points.append(Impact(real_distance, score, closest_zone, to_degrees(rad_angle) + 180, 1))
 
-    # Encode the image to PNG format
-    _, buffer = cv2.imencode('.png', sheet_mat)
-    # Convert the buffer to a base64 string
-    base64_string = base64.b64encode(buffer.tobytes()).decode('utf-8')
-    # Add the MIME type prefix
-    return {
-        'image':f"data:image/png;base64,{base64_string}",'impacts': points}
 
-# main function
-if __name__ == '__main__':
-    image = cv2.imread("image.jpg")
+def draw_targets(coordinates, sheet_mat):
+    # iterate key and value
+    for key, ellipse_contrat in coordinates.items():
+        drawing_width = 2
 
-    while True:
-        process_image(image)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        # Draw the ellipse
+        target_color = (0, 255, 0)
+        # Grow the ellipse
+        ellipse_cross_tip = grow_ellipse(ellipse_contrat, 2.2)
+        ellipse_mouche = grow_ellipse(ellipse_contrat, 0.2)
+        ellipse_petit_blanc = grow_ellipse(ellipse_contrat, 0.6)
+        ellipse_moyen_blanc = grow_ellipse(ellipse_contrat, 1.4)
+        ellipse_grand_blanc = grow_ellipse(ellipse_contrat, 1.8)
+        # Draw the ellipses
+        cv2.ellipse(sheet_mat, ellipse_contrat, target_color, drawing_width)
+        cv2.ellipse(sheet_mat, ellipse_mouche, target_color, drawing_width)
+        cv2.ellipse(sheet_mat, ellipse_petit_blanc, target_color, drawing_width)
+        cv2.ellipse(sheet_mat, ellipse_moyen_blanc, target_color, drawing_width)
+        cv2.ellipse(sheet_mat, ellipse_grand_blanc, target_color, drawing_width)
 
+        top_point = get_point_on_ellipse(ellipse_cross_tip, to_radians(90))
+        bottom_point = get_point_on_ellipse(ellipse_cross_tip, to_radians(270))
+        left_point = get_point_on_ellipse(ellipse_cross_tip, to_radians(180))
+        right_point = get_point_on_ellipse(ellipse_cross_tip, to_radians(0))
+        cv2.line(sheet_mat, top_point, bottom_point, target_color, drawing_width)
+        cv2.line(sheet_mat, left_point, right_point, target_color, drawing_width)
