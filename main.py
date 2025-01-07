@@ -20,9 +20,7 @@ notion_token = os.environ.get('NOTION_TOKEN')
 
 notion_database_id = os.environ.get('NOTION_DATABASE_ID')
 
-import socket
 
-# Constants
 SECRET_KEY = secrets.token_urlsafe(32)
 ALGORITHM = "HS256"
 TOKEN_EXPIRATION_HOURS = 3600
@@ -39,15 +37,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Temporary token storage (for demo purposes)
 tokens = {}
 
 
 class ImageRequest(BaseModel):
     image_data: str
 
-
-# Generate a temporary token
 @app.get("/generate-token")
 def generate_token():
     expiration = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRATION_HOURS)
@@ -57,7 +52,6 @@ def generate_token():
     return {"token": token, "expiration": expiration}
 
 
-# Validate a token
 def validate_token(authorization: str = Header(...)):
     try:
         # Extract the token from the "Authorization" header
@@ -72,30 +66,20 @@ def validate_token(authorization: str = Header(...)):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-# Endpoint to process the image
 @app.post("/detect-target")
 def detect_target(
         request: ImageRequest,
         authorization: str = Depends(validate_token)
 ):
     try:
-        # Decode the base64 image string
         decoded_data = base64.b64decode(request.image_data)
-        # Convert bytes to NumPy array
         np_array = np.frombuffer(decoded_data, dtype=np.uint8)
-        # Decode the image using OpenCV
         image = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
 
         if image is None:
             raise ValueError("Invalid image format.")
-        # Perform your image processing here
-        # benchmarking
-        start = datetime.now()
-        coordinates = get_sheet_coordinates(image)
-        print(f"Time taken: {datetime.now() - start}")
-        return coordinates
+        return get_sheet_coordinates(image)
     except Exception as e:
-        # trace the error
         print(traceback.format_exc())
         raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")
 
@@ -105,16 +89,12 @@ def extract_news(notion_json):
     extracted_data = []
     for item in notion_json.get("results", []):
         properties = item.get("properties", {})
-
         title = properties.get("Titre", {}).get("title", [])
         title_text = title[0]["plain_text"] if title else ""
-
         date = properties.get("Date", {}).get("date", {}).get("start", "")
         date_obj = datetime.strptime(date, "%Y-%m-%d").date() if date else None
-
         illustration_files = properties.get("Illustration", {}).get("files", [])
         illustration = illustration_files[0]["file"]["url"] if illustration_files else ""
-
         description_rich_text = properties.get("Description", {}).get("rich_text", [])
         description_html = "".join([
             f"<b>{t['text']['content']}</b>" if t["annotations"]["bold"] else
@@ -133,14 +113,10 @@ def extract_news(notion_json):
     return extracted_data
 
 def fetch_news():
-    # Initialize the Notion client
     client = Client(auth=notion_token)
-
-    # Get the database
     db_rows = client.databases.query(database_id=notion_database_id)
     notion_data = json.loads(json.dumps(db_rows))  # Replace with actual JSON
     parsed_data = extract_news(notion_data)
-
     return {
         "timestamp": datetime.now(),
         "data": parsed_data
@@ -149,17 +125,12 @@ def fetch_news():
 @app.get("/news")
 def get_news():
     global news_cache
-    # Check if the cache is empty or expired
     if news_cache is None or datetime.now() - news_cache["timestamp"] > timedelta(minutes=5):
         news_cache = fetch_news()
     return news_cache["data"]
 
 
 def safe_get(data, dot_chained_keys):
-    '''
-        {'a': {'b': [{'c': 1}]}}
-        safe_get(data, 'a.b.0.c') -> 1
-    '''
     keys = dot_chained_keys.split('.')
     for key in keys:
         try:
@@ -178,17 +149,12 @@ def target_score(
         authorization: str = Depends(validate_token)
 ):
     try:
-        # Decode the base64 image string
         decoded_data = base64.b64decode(request.image_data)
-        # Convert bytes to NumPy array
         np_array = np.frombuffer(decoded_data, dtype=np.uint8)
-        # Decode the image using OpenCV
         image = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
-        # save the image to disk
         cv2.imwrite("image.jpg", image)
         if image is None:
             raise ValueError("Invalid image format.")
-        # Perform your image processing here
         return process_image(image)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")

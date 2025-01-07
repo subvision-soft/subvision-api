@@ -38,55 +38,51 @@ KERNEL_SIZE = (PICTURE_SIZE_SHEET_DETECTION // 200, PICTURE_SIZE_SHEET_DETECTION
 ROUND_KERNEL = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, KERNEL_SIZE)
 yolo_v8 = YOLOSeg("nano_semantic_model.onnx", conf_thres=0.5)
 
-
+# Conversion d'un angle (degrés) en radian
 def to_radians(angle):
     return angle * math.pi / 180
 
-
+# Conversion d'un angle (radian) en degrés
 def to_degrees(angle):
     return angle * 180 / math.pi
 
-
+# Rotation d'un point autour d'un autre point
 def rotate_point(center, point, angle):
     s = math.sin(angle)
     c = math.cos(angle)
 
-    # Translate point back to origin
     translated_x = point[0] - center[0]
     translated_y = point[1] - center[1]
 
-    # Rotate point
     rotated_x = translated_x * c - translated_y * s
     rotated_y = translated_x * s + translated_y * c
 
-    # Translate point back
     new_point = (rotated_x + center[0], rotated_y + center[1])
 
     return new_point
 
-
+# Récupération du point sur l'ellipse en fonction de l'angle
 def get_point_on_ellipse(ellipse, angle):
     center, radii, ellipse_angle = ellipse
     radius_x, radius_y = radii
     x = center[0] + math.cos(angle) * (radius_x / 2)
     y = center[1] + math.sin(angle) * (radius_y / 2)
-    # Convert the coordinates to integers
     return int(x), int(y)
 
-
+# Agrandissement de l'ellipse en fonction du facteur
 def grow_ellipse(ellipse, factor):
     center, radii, angle = ellipse
     return center, (radii[0] * factor, radii[1] * factor), angle
 
-
+# Récupération de la distance entre deux points
 def get_distance(point1, point2):
     return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
 
-
+# Récupération de l'angle entre deux points
 def get_angle(point1, point2):
     return math.atan2(point2[1] - point1[1], point2[0] - point1[0])
 
-
+# Récupération de la distance réelle en mm
 def get_real_distance(center, border, impact) -> int:
     length = get_distance(center, border)
     distance = get_distance(center, impact)
@@ -96,6 +92,7 @@ def get_real_distance(center, border, impact) -> int:
     return round(millimeter_distance)
 
 
+# Récupération du score en fonction de la distance en mm
 def get_score(distance) -> int:
     score = 570
     i = 0
@@ -115,39 +112,20 @@ def get_score(distance) -> int:
     return score
 
 
+# Dessine des croix à des coordonnées spécifiques sur une image
 def draw_cross_at_coordinates(image: np.ndarray, coordinates: list, color: tuple = (0, 255, 0), size: int = 20,
                               width: int = 2):
     for coordinate in coordinates:
-        # Convert coordinates to integers in case they are floats
         x, y = int(coordinate[0]), int(coordinate[1])
-
-        # Draw horizontal line of the cross
-        # check if the line is in the image
         if x - size >= 0 and x + size < image.shape[1] and 0 <= y < image.shape[0]:
             cv2.line(image, (x - size, y), (x + size, y), color, width)
-            # Draw vertical line of the cross
             cv2.line(image, (x, y - size), (x, y + size), color, width)
-
-
-def enhance_image_for_edge_detection(image: ndarray, blur_radius: int = 0):
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    h, saturation, v = cv2.split(hsv)
-    if blur_radius > 0:
-        v = cv2.blur(v, (blur_radius, blur_radius))
-    return v
-
-
-def get_edges(image: ndarray, blur_radius: int = 0, canny_threshold_1: int = 100, canny_threshold_2: int = 200):
-    image_clone = image.copy()
-    if blur_radius > 0:
-        image_clone = cv2.blur(image_clone, (blur_radius, blur_radius))
-    return cv2.Canny(image_clone, canny_threshold_1, canny_threshold_2)
 
 
 def clamp(value, min_value=-1.0, max_value=1.0):
     return max(min_value, min(value, max_value))
 
-
+# On récupère le plus grand contour valide
 def get_biggest_valid_contour(contours):
     biggest_contour = None
     biggest_area = 0
@@ -178,23 +156,19 @@ def coordinates_to_percentage(coordinates, width, height):
         percentage_coordinates.append((coordinate[0] / width, coordinate[1] / height))
     return percentage_coordinates
 
-
+# Récupération des coordonnées du plastron
 def get_sheet_coordinates(sheet_mat: ndarray):
     mat_resized = cv2.resize(sheet_mat.copy(), (PICTURE_SIZE_SHEET_DETECTION, PICTURE_SIZE_SHEET_DETECTION))
     boxes, scores, _, masks = yolo_v8(mat_resized)
     if masks is not None and len(masks) > 0:
-        # get index of best detection
         best_detection_index = np.argsort(scores)[-1:]
         mask = masks[best_detection_index[0]]
         mask = (mask * 255).astype(np.uint8)
         mask = cv2.resize(mask, (PICTURE_SIZE_SHEET_DETECTION, PICTURE_SIZE_SHEET_DETECTION))
         contours, _ = cv2.findContours(mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
         biggest_contour = get_biggest_valid_contour(contours)
-        # draw the contour
         if biggest_contour is None:
             return None
-
-        # Get coordinates of the biggest contour and convert to percentage
         return coordinates_to_percentage(
             [(biggest_contour[i][0][0], biggest_contour[i][0][1]) for i in range(4)],
             PICTURE_SIZE_SHEET_DETECTION,
@@ -202,20 +176,14 @@ def get_sheet_coordinates(sheet_mat: ndarray):
         )
     return None
 
-
-def draw_sheet_detection_contour(image, coordinates):
-    coordinates_len = len(coordinates)
-    for i in range(coordinates_len):
-        cv2.line(image, coordinates[i], coordinates[(i + 1) % coordinates_len], (0, 255, 0), 3)
-
-
+# A partir des coordonnées en pourcentage, on les convertit en coordonnées réelles (pixels)
 def percentage_to_coordinates(percentage_coordinates, width, height):
     coordinates = []
     for percentage_coordinate in percentage_coordinates:
         coordinates.append((int(percentage_coordinate[0] * width), int(percentage_coordinate[1] * height)))
     return coordinates
 
-
+# A partir de l'image initial, on extraie l'image du plastron recadré
 def get_sheet_picture(image: ndarray) -> ndarray or None:
     coordinates = get_sheet_coordinates(image)
     if coordinates is None:
@@ -233,6 +201,7 @@ def get_sheet_picture(image: ndarray) -> ndarray or None:
                                (PICTURE_SIZE_SHEET_DETECTION, PICTURE_SIZE_SHEET_DETECTION))
 
 
+# A partir de l'image du plastron, on récupère les coordonnées correspondant à la zone
 def get_crop_coordinates(image: ndarray, target_zone: Zone):
     height, width, _ = image.shape
     x1, x2, y1, y2 = 0, width, 0, height
@@ -252,14 +221,15 @@ def get_crop_coordinates(image: ndarray, target_zone: Zone):
     return {'x1': x1, 'x2': x2, 'y1': y1, 'y2': y2}
 
 
+# A partir de l'image du plastron, on récupère l'image du visuel correspondant à la zone
 def get_target_picture(sheet_mat: ndarray, target_zone: Zone) -> ndarray:
     sheet_mat_clone = sheet_mat.copy()
     coordinates = get_crop_coordinates(sheet_mat_clone, target_zone)
     return sheet_mat_clone[coordinates['x1']:coordinates['x2'], coordinates['y1']:coordinates['y2']]
 
 
+# A partir d'une image (plastron/visuel), on récupère le masque des impacts (noir et blanc)
 def get_impacts_mask(image: ndarray) -> ndarray:
-    # image = cv2.blur(image.copy(), (PICTURE_SIZE_SHEET_DETECTION // 200, PICTURE_SIZE_SHEET_DETECTION // 200))
     image = image.copy()
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     h, saturation, v = cv2.split(hsv)
@@ -273,31 +243,26 @@ def get_impacts_mask(image: ndarray) -> ndarray:
     high = np.full((saturation.shape[0], saturation.shape[1]), upper_bound, dtype=np.uint8)
 
     cv2.inRange(saturation, low, high, saturation)
-    # remove noise
     saturation = cv2.morphologyEx(saturation, cv2.MORPH_OPEN, ROUND_KERNEL, iterations=1)
     _, saturation = cv2.threshold(saturation, 127, 255, cv2.THRESH_BINARY)
     contours, hierarchy = cv2.findContours(saturation, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     ellipsis = [cv2.fitEllipse(contour) for contour in contours]
-    # create a mask image that contains the contour filled in
-    mask = np.zeros_like(saturation)  # Create mask where white is what we want, black otherwise
-    # get ellipses centers
+    mask = np.zeros_like(saturation)
     for ellipse in ellipsis:
         cv2.ellipse(mask, ellipse, (255, 255, 255), -1)
     return mask
 
-
+# A partir d'une image (plastron), on récupère les coordonnées des impacts
 def get_impacts_coordinates(image: ndarray) -> list:
     mask = get_impacts_mask(image)
     contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contours = [contour for contour in contours if len(contour) >= 5]
     ellipses = [cv2.fitEllipse(contour) for contour in contours]
-    # get ellipses centers
-    # remove ellipses with nan values
     ellipses = [ellipse for ellipse in ellipses if not math.isnan(ellipse[0][0]) and not math.isnan(ellipse[0][1])]
     centers = [(int(ellipse[0][0]), int(ellipse[0][1])) for ellipse in ellipses]
     return centers
 
-
+# A partir d'une couleur et d'une image, on récupère le masque correspondant à la couleur
 def get_color_mask(mat: ndarray, color: tuple):
     color_mat = np.full((1, 1, 3), color, dtype=np.uint8)
     hsv = cv2.cvtColor(color_mat, cv2.COLOR_RGB2HSV)
@@ -313,6 +278,7 @@ def get_color_mask(mat: ndarray, color: tuple):
     return mask
 
 
+# A partir de l'image d'un visuel, on récupère l'ellipse correspondant au contrat du visuel
 def get_target_ellipse(mat) -> Ellipse:
     circle = np.zeros((mat.shape[1], mat.shape[0]), dtype=np.uint8)
     cv2.circle(circle, (mat.shape[1] // 2, mat.shape[0] // 2), int(mat.shape[1] / 2.2), (255, 255, 255), -1)
@@ -335,7 +301,6 @@ def get_target_ellipse(mat) -> Ellipse:
     cv2.bitwise_and(value_mask, circle, value_mask)
 
     impacts = get_impacts_mask(mat)
-    # remove impacts from the mask
     cv2.bitwise_and(value_mask, cv2.bitwise_not(impacts), value_mask)
     close = cv2.morphologyEx(value_mask, cv2.MORPH_CLOSE, ROUND_KERNEL)
     close = cv2.morphologyEx(close, cv2.MORPH_OPEN, ROUND_KERNEL)
@@ -367,7 +332,7 @@ def get_target_ellipse(mat) -> Ellipse:
             raise ValueError('Problem during visual detection')
     return ellipse
 
-
+# A partir de l'image d'un visuel, on récupère les ellipses correspondant aux contrats des visuels
 def get_targets_ellipse(image: ndarray) -> dict[Zone, Ellipse]:
     zones = [Zone.TOP_LEFT, Zone.TOP_RIGHT, Zone.CENTER, Zone.BOTTOM_LEFT, Zone.BOTTOM_RIGHT]
     ellipsis = {}
@@ -376,7 +341,7 @@ def get_targets_ellipse(image: ndarray) -> dict[Zone, Ellipse]:
         ellipsis[zone] = get_target_ellipse(target_mat)
     return ellipsis
 
-
+# On convertit les coordonnées des visuels du référentiel plastron recadré au référentiel de l'image initial
 def target_coordinates_to_sheet_coordinates(ellipsis: dict):
     new_ellipsis = {}
     for key, value in ellipsis.items():
@@ -397,7 +362,7 @@ def target_coordinates_to_sheet_coordinates(ellipsis: dict):
                 value[1], value[2])
     return new_ellipsis
 
-
+# A partir d'une image on retourne les impacts (score, distance, zone, angle) et l'image avec les impacts dessinés
 def process_image(image: ndarray) -> tuple[bytes, list[Impact]] or None:
     sheet_mat = get_sheet_picture(image)
     if sheet_mat is None:
@@ -411,10 +376,7 @@ def process_image(image: ndarray) -> tuple[bytes, list[Impact]] or None:
     draw_cross_at_coordinates(sheet_mat, impacts, color=(0, 165, 255), width=3)
     points: list[Impact] = []
     draw_and_get_impacts_points(impacts, points, sheet_mat, targets_ellipsis)
-
-    # Encode the image to PNG format
     _, buffer = cv2.imencode('.png', sheet_mat)
-    # Convert the buffer to a base64 string
     base64_string = base64.b64encode(buffer.tobytes()).decode('utf-8')
 
     return {
@@ -422,7 +384,7 @@ def process_image(image: ndarray) -> tuple[bytes, list[Impact]] or None:
         'impacts': points
     }
 
-
+# On dessine les impacts sur l'image et on récupère les informations des impacts
 def draw_and_get_impacts_points(impacts, points, sheet_mat, targets_ellipsis):
     for impact in impacts:
         min_distance = float('inf')
@@ -478,21 +440,16 @@ def draw_and_get_impacts_points(impacts, points, sheet_mat, targets_ellipsis):
         )
         points.append(Impact(real_distance, score, closest_zone, to_degrees(rad_angle) + 180, 1))
 
-
+# On dessine les visuels sur l'image
 def draw_targets(coordinates, sheet_mat):
-    # iterate key and value
     for key, ellipse_contrat in coordinates.items():
         drawing_width = 2
-
-        # Draw the ellipse
         target_color = (0, 255, 0)
-        # Grow the ellipse
         ellipse_cross_tip = grow_ellipse(ellipse_contrat, 2.2)
         ellipse_mouche = grow_ellipse(ellipse_contrat, 0.2)
         ellipse_petit_blanc = grow_ellipse(ellipse_contrat, 0.6)
         ellipse_moyen_blanc = grow_ellipse(ellipse_contrat, 1.4)
         ellipse_grand_blanc = grow_ellipse(ellipse_contrat, 1.8)
-        # Draw the ellipses
         cv2.ellipse(sheet_mat, ellipse_contrat, target_color, drawing_width)
         cv2.ellipse(sheet_mat, ellipse_mouche, target_color, drawing_width)
         cv2.ellipse(sheet_mat, ellipse_petit_blanc, target_color, drawing_width)
