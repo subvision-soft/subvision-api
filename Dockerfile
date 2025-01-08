@@ -11,16 +11,12 @@ COPY ./requirements.txt /requirements.txt
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgl1-mesa-glx \
-    libglib2.0-0
-
-RUN pip install --no-cache-dir --upgrade pip
-
-RUN pip install --no-cache-dir torch torchvision torchaudio \
-    --index-url https://download.pytorch.org/whl/cpu
-
-RUN pip install --no-cache-dir -r /requirements.txt
-
-RUN apt-get remove -y build-essential && apt-get autoremove -y && apt-get clean
+    libglib2.0-0 \
+    && pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir -r /requirements.txt \
+    && apt-get remove -y build-essential && apt-get autoremove -y && apt-get clean
 
 # Copy the rest of the application
 COPY ./ /
