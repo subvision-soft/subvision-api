@@ -64,9 +64,9 @@ def rotate_point(center, point, angle):
 # Récupération du point sur l'ellipse en fonction de l'angle
 def get_point_on_ellipse(ellipse, angle):
     center, radii, ellipse_angle = ellipse
-    radius_x, radius_y = radii
-    x = center[0] + math.cos(angle) * (radius_x / 2)
-    y = center[1] + math.sin(angle) * (radius_y / 2)
+    radius_height,radius_width = radii
+    x = center[0] + math.cos(angle) * (radius_width / 2)
+    y = center[1] + math.sin(angle) * (radius_height / 2)
     return int(x), int(y)
 
 # Agrandissement de l'ellipse en fonction du facteur
@@ -398,26 +398,26 @@ def draw_and_get_impacts_points(impacts, points, sheet_mat, targets_ellipsis):
 
         if closest_zone is None:
             raise ValueError('Aucune zone trouvée')
-
-        rad_angle = get_angle(impact, targets_ellipsis[closest_zone][0])
-        angle = rad_angle + to_radians(360)
-        ellipse_angle = to_radians(targets_ellipsis[closest_zone][2] + 360)
-        angle = angle - ellipse_angle
-        point_on_ellipse = get_point_on_ellipse(
-            targets_ellipsis[closest_zone],
-            angle
-        )
-        point_on_ellipse = rotate_point(
-            targets_ellipsis[closest_zone][0],
-            point_on_ellipse,
-            ellipse_angle + to_radians(180)
-        )
-
-        real_distance = get_real_distance(
-            targets_ellipsis[closest_zone][0],
-            point_on_ellipse,
-            impact
-        )
+        ## TODO Vérifier cette partie, je ne suis pas sûr de la logique#################################
+        rad_angle = get_angle(impact, targets_ellipsis[closest_zone][0])                               #
+        angle = rad_angle + to_radians(360)                                                            #
+        ellipse_angle = to_radians(targets_ellipsis[closest_zone][2] + 360)                            #
+        angle = angle - ellipse_angle                                                                  #
+        point_on_ellipse = get_point_on_ellipse(                                                       #
+            targets_ellipsis[closest_zone],                                                            #
+            angle                                                                                      #
+        )                                                                                              #
+        point_on_ellipse = rotate_point(                                                               #
+            targets_ellipsis[closest_zone][0],                                                         #
+            point_on_ellipse,                                                                          #
+            ellipse_angle + to_radians(180)                                                            #
+        )                                                                                              #
+        real_distance = get_real_distance(                                                             #
+            targets_ellipsis[closest_zone][0],                                                         #
+            point_on_ellipse,                                                                          #
+            impact                                                                                     #
+        )                                                                                              #
+        ################################################################################################
         score = get_score(real_distance)
 
         cv2.putText(
@@ -455,7 +455,6 @@ def draw_targets(coordinates, sheet_mat):
         cv2.ellipse(sheet_mat, ellipse_petit_blanc, target_color, drawing_width)
         cv2.ellipse(sheet_mat, ellipse_moyen_blanc, target_color, drawing_width)
         cv2.ellipse(sheet_mat, ellipse_grand_blanc, target_color, drawing_width)
-
         top_point = get_point_on_ellipse(ellipse_cross_tip, to_radians(90))
         bottom_point = get_point_on_ellipse(ellipse_cross_tip, to_radians(270))
         left_point = get_point_on_ellipse(ellipse_cross_tip, to_radians(180))

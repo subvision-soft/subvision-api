@@ -152,7 +152,6 @@ def target_score(
         decoded_data = base64.b64decode(request.image_data)
         np_array = np.frombuffer(decoded_data, dtype=np.uint8)
         image = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
-        cv2.imwrite("image.jpg", image)
         if image is None:
             raise ValueError("Invalid image format.")
         return process_image(image)
