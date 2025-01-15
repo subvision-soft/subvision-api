@@ -42,6 +42,7 @@ model_onnx = model_path = os.path.join(os.path.dirname(__file__), "nano_semantic
 yolo_v8 = YOLOSeg(model_onnx, conf_thres=0.5)
 
 
+
 # Conversion d'un angle (degrés) en radian
 def to_radians(angle):
     return angle * math.pi / 180
@@ -75,6 +76,7 @@ def get_point_on_ellipse(ellipse, angle):
     x = center[0] + math.cos(angle) * (radius_width / 2)
     y = center[1] + math.sin(angle) * (radius_height / 2)
     return x, y
+
 
 
 # Agrandissement de l'ellipse en fonction du facteur
@@ -366,11 +368,6 @@ def target_coordinates_to_sheet_coordinates(ellipsis: dict):
     return new_ellipsis
 
 
-@dataclass
-class ProcessResults:
-    image : str
-    impacts : list[Impact]
-
 # A partir d'une image on retourne les impacts (score, distance, zone, angle) et l'image avec les impacts dessinés
 def process_image(image: ndarray) -> ProcessResults or None:
     sheet_mat = get_sheet_picture(image)
@@ -417,6 +414,7 @@ def retrieve_ellipse(image: np.ndarray):
         ellipse = cv2.fitEllipse(pts_edges)
 
     return ellipse
+
 # On dessine les impacts sur l'image et on récupère les informations des impacts
 def draw_and_get_impacts_points(impacts, sheet_mat, targets_ellipsis):
     points: list[Impact] = []
@@ -428,11 +426,11 @@ def draw_and_get_impacts_points(impacts, sheet_mat, targets_ellipsis):
         center = tuple(map(int, target_ellipsis[0]))
         rad_angle = get_angle(impact, center) + to_radians(180)
         point_on_ellipse = get_point_on_ellipse(target_ellipsis, rad_angle)
-
         cv2.line(sheet_mat, center, tuple(map(int, point_on_ellipse)), black, 2)
         cv2.circle(sheet_mat, center, 5, blue, -1)
         cv2.circle(sheet_mat, tuple(map(int, point_on_ellipse)), 5, blue, -1)
         cv2.circle(sheet_mat, tuple(map(int, impact)), 5, orange, -1)
+
 
         dx, dy = point_on_ellipse[0] - center[0], point_on_ellipse[1] - center[1]
         norm = (dx ** 2 + dy ** 2) ** 0.5
@@ -445,7 +443,8 @@ def draw_and_get_impacts_points(impacts, sheet_mat, targets_ellipsis):
         real_distance = get_real_distance(center, point_on_ellipse, impact)
         score = get_score(real_distance)
         for thickness, color in [(6, black), (2, white)]:
-            cv2.putText(sheet_mat, str(score), tuple(map(int, impact)), cv2.FONT_HERSHEY_SIMPLEX, 1, color, thickness)
+        cv2.putText(sheet_mat, str(score), tuple(map(int, impact)), cv2.FONT_HERSHEY_SIMPLEX, 1, color, thickness)
+
 
         points.append(Impact(real_distance, score, closest_zone, to_degrees(rad_angle) + 180, 1))
     return points
