@@ -6,7 +6,7 @@ import base64
 import cv2
 import numpy as np
 import os
-from image import compress_base64_image
+from image.py import compress_base64_image
 
 
 from yoloseg.YOLOSeg import YOLOSeg
