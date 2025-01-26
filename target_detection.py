@@ -6,8 +6,6 @@ import base64
 import cv2
 import numpy as np
 import os
-from image.py import compress_base64_image
-
 
 from yoloseg.YOLOSeg import YOLOSeg
 
@@ -390,9 +388,7 @@ def process_image(image: ndarray) -> ProcessResults or None:
     _, buffer = cv2.imencode('.png', sheet_mat)
     base64_string = base64.b64encode(buffer.tobytes()).decode('utf-8')
 
-    compress_base64_image
-
-    return ProcessResults(image="data:image/png;base64,"+compress_base64_image(base64_string),impacts= points)
+    return ProcessResults(image="data:image/png;base64,"+base64_string,impacts= points)
 
 def retrieve_ellipse(image: np.ndarray):
 
