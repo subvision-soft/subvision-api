@@ -7,4 +7,3 @@ ultralytics==8.3.55
 uvicorn==0.34.0
 onnxruntime==1.20.1
 notion-client==2.3.0
-pillow>=11.1.0
