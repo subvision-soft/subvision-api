@@ -385,11 +385,10 @@ def process_image(image: ndarray) -> ProcessResults or None:
     draw_targets(targets_ellipsis, sheet_mat)
 
     points: list[Impact] = draw_and_get_impacts_points(impacts, sheet_mat, targets_ellipsis)
-    encode_param = [int(cv2.IMWRITE_PNG_COMPRESSION), 3]
-    mirrored_img = cv2.flip(sheet_mat, -1)
-    _, buffer = cv2.imencode('.png', mirrored_img, encode_param)
+    mirrored_img = cv2.flip(sheet_mat, 0)
+    _, buffer = cv2.imencode('.jpg', mirrored_img, [cv2.IMWRITE_JPEG_QUALITY, 20])
 
-    return ProcessResults(image="data:image/png;base64,"+base64.b64encode(buffer).decode('utf-8') ,impacts= points)
+    return ProcessResults(image="data:image/jpeg;base64," + base64.b64encode(buffer).decode('utf-8'), impacts=points)
 
 def retrieve_ellipse(image: np.ndarray):
 
