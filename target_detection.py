@@ -320,8 +320,8 @@ def get_target_ellipse(mat) -> Ellipse:
         xor = cv2.bitwise_xor(empty_gray, close)
         close = cv2.bitwise_or(close, xor)
         ellipse = retrieve_ellipse(close)
-        if ellipse[1][0] < ellipse[1][1] * 0.7 or ellipse[1][0] > ellipse[1][1] * 1.3:
-            raise ValueError('Problem during visual detection')
+        # if ellipse[1][0] < ellipse[1][1] * 0.7 or ellipse[1][0] > ellipse[1][1] * 1.3:
+            # raise ValueError('Problem during visual detection')
     for i in range(1):
         empty = np.zeros(mat.shape, dtype=np.uint8)
         cv2.ellipse(empty, ellipse, (255, 255, 255), -1)
@@ -330,8 +330,8 @@ def get_target_ellipse(mat) -> Ellipse:
         mat_copy = mat.copy()
         ellipse = retrieve_ellipse(close)
         cv2.ellipse(mat_copy, ellipse, (0, 255, 0), 1)
-        if ellipse[1][0] < ellipse[1][1] * 0.7 or ellipse[1][0] > ellipse[1][1] * 1.3:
-            raise ValueError('Problem during visual detection')
+        # if ellipse[1][0] < ellipse[1][1] * 0.7 or ellipse[1][0] > ellipse[1][1] * 1.3:
+        #     raise ValueError('Problem during visual detection')
     return ellipse
 
 
