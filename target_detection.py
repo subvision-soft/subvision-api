@@ -445,8 +445,8 @@ def draw_and_get_impacts_points(impacts, sheet_mat, targets_ellipsis):
 
         real_distance = get_real_distance(center, point_on_ellipse, impact)
         score = get_score(real_distance)
-        for thickness, color in [(6, black), (2, white)]:
-            cv2.putText(sheet_mat, str(score),  tuple_int_cast(impact), cv2.FONT_HERSHEY_SIMPLEX, 1, color, thickness)
+        for thickness, color in [(20, black), (10, white)]:
+            cv2.putText(sheet_mat, str(score),  tuple_int_cast(impact), cv2.FONT_HERSHEY_SIMPLEX, 2, color, thickness)
 
         points.append(Impact(real_distance, score, closest_zone, to_degrees(rad_angle) + 180, 1))
     return points
