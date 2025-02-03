@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta
-
+from datetime import timedelta
+import datetime
 from fastapi import APIRouter
-from jose import jwt
+import jwt
 
 from routers.dependencies import SECRET_KEY, ALGORITHM, TOKENS
 
@@ -11,7 +11,7 @@ router = APIRouter()
 
 @router.get("/")
 def generate_token():
-    expiration = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRATION_HOURS)
+    expiration = datetime.datetime.now(datetime.UTC) + timedelta(hours=TOKEN_EXPIRATION_HOURS)
     token = jwt.encode({
         "exp": expiration}, SECRET_KEY, algorithm=ALGORITHM)
     TOKENS[token] = expiration

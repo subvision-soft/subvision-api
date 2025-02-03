@@ -9,6 +9,8 @@ import os
 
 from yoloseg.YOLOSeg import YOLOSeg
 
+import concurrent.futures
+
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 from numpy import ndarray
@@ -313,7 +315,7 @@ def get_target_ellipse(mat) -> Ellipse:
 
     ellipse = retrieve_ellipse(close)
 
-    for i in range(1):
+    try:
         empty = np.zeros(mat.shape, dtype=np.uint8)
         cv2.ellipse(empty, ellipse, (255, 255, 255), -1)
         empty_gray = cv2.cvtColor(empty, cv2.COLOR_BGR2GRAY)
@@ -321,8 +323,8 @@ def get_target_ellipse(mat) -> Ellipse:
         close = cv2.bitwise_or(close, xor)
         ellipse = retrieve_ellipse(close)
         if ellipse[1][0] < ellipse[1][1] * 0.7 or ellipse[1][0] > ellipse[1][1] * 1.3:
-            raise ValueError('Problem during visual detection')
-    for i in range(1):
+            raise ValueError('Problem during visual detection 1')
+    except ValueError:
         empty = np.zeros(mat.shape, dtype=np.uint8)
         cv2.ellipse(empty, ellipse, (255, 255, 255), -1)
         empty_gray = cv2.cvtColor(empty, cv2.COLOR_BGR2GRAY)
@@ -332,17 +334,26 @@ def get_target_ellipse(mat) -> Ellipse:
         cv2.ellipse(mat_copy, ellipse, (0, 255, 0), 1)
         if ellipse[1][0] < ellipse[1][1] * 0.7 or ellipse[1][0] > ellipse[1][1] * 1.3:
             raise ValueError('Problem during visual detection')
+
     return ellipse
 
 
 # A partir de l'image d'un visuel, on récupère les ellipses correspondant aux contrats des visuels
 def get_targets_ellipse(image: ndarray) -> dict[Zone, Ellipse]:
     zones = [Zone.TOP_LEFT, Zone.TOP_RIGHT, Zone.CENTER, Zone.BOTTOM_LEFT, Zone.BOTTOM_RIGHT]
-    ellipsis = {}
-    for zone in zones:
-        target_mat = get_target_picture(image, zone)
-        ellipsis[zone] = get_target_ellipse(target_mat)
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = {zone: executor.submit(get_target_ellipse_for_zone, image, zone) for zone in zones}
+
+        ellipsis = {}
+        for zone, future in futures.items():
+            ellipsis[zone] = future.result()
+
     return ellipsis
+
+
+def get_target_ellipse_for_zone(image: np.ndarray, zone: Zone) -> Ellipse:
+    return get_target_ellipse(get_target_picture(image, zone))
 
 
 # On convertit les coordonnées des visuels du référentiel plastron recadré au référentiel de l'image initial
@@ -370,8 +381,8 @@ def target_coordinates_to_sheet_coordinates(ellipsis: dict):
 
 @dataclass
 class ProcessResults:
-    image : str
-    impacts : list[Impact]
+    image: str
+    impacts: list[Impact]
 
 # A partir d'une image on retourne les impacts (score, distance, zone, angle) et l'image avec les impacts dessinés
 def process_image(image: ndarray) -> ProcessResults or None:
@@ -390,11 +401,10 @@ def process_image(image: ndarray) -> ProcessResults or None:
     return ProcessResults(image="data:image/webp;base64," + base64.b64encode(buffer).decode('utf-8'), impacts=points)
 
 def retrieve_ellipse(image: np.ndarray):
-
     contours, _ = cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     biggest_contour = max(contours, key=cv2.contourArea)
     mask = np.zeros_like(image)
-    mask  = cv2.drawContours(mask, [biggest_contour], -1, (255, 255, 255), -1)
+    mask = cv2.drawContours(mask, [biggest_contour], -1, (255, 255, 255), -1)
 
     # Extract points
     np.column_stack(np.where(mask.T))
@@ -418,6 +428,8 @@ def retrieve_ellipse(image: np.ndarray):
         ellipse = cv2.fitEllipse(pts_edges)
 
     return ellipse
+
+
 # On dessine les impacts sur l'image et on récupère les informations des impacts
 def draw_and_get_impacts_points(impacts, sheet_mat, targets_ellipsis):
     points: list[Impact] = []
@@ -433,7 +445,7 @@ def draw_and_get_impacts_points(impacts, sheet_mat, targets_ellipsis):
         cv2.line(sheet_mat, center, tuple_int_cast(point_on_ellipse), black, 2)
         cv2.circle(sheet_mat, center, 5, blue, -1)
         cv2.circle(sheet_mat, tuple_int_cast(point_on_ellipse), 5, blue, -1)
-        cv2.circle(sheet_mat,  tuple_int_cast(impact), 5, orange, -1)
+        cv2.circle(sheet_mat, tuple_int_cast(impact), 5, orange, -1)
 
         dx, dy = point_on_ellipse[0] - center[0], point_on_ellipse[1] - center[1]
         norm = (dx ** 2 + dy ** 2) ** 0.5
@@ -446,7 +458,7 @@ def draw_and_get_impacts_points(impacts, sheet_mat, targets_ellipsis):
         real_distance = get_real_distance(center, point_on_ellipse, impact)
         score = get_score(real_distance)
         for thickness, color in [(20, black), (10, white)]:
-            cv2.putText(sheet_mat, str(score),  tuple_int_cast(impact), cv2.FONT_HERSHEY_SIMPLEX, 2, color, thickness)
+            cv2.putText(sheet_mat, str(score), tuple_int_cast(impact), cv2.FONT_HERSHEY_SIMPLEX, 2, color, thickness)
 
         points.append(Impact(real_distance, score, closest_zone, to_degrees(rad_angle) + 180, 1))
     return points
@@ -471,5 +483,5 @@ def draw_targets(coordinates, sheet_mat):
         bottom_point = get_point_on_ellipse(ellipse_cross_tip, to_radians(270))
         left_point = get_point_on_ellipse(ellipse_cross_tip, to_radians(180))
         right_point = get_point_on_ellipse(ellipse_cross_tip, to_radians(0))
-        cv2.line(sheet_mat,  tuple_int_cast(top_point),  tuple_int_cast(bottom_point), target_color, drawing_width)
-        cv2.line(sheet_mat,  tuple_int_cast( left_point),  tuple_int_cast(right_point), target_color, drawing_width)
+        cv2.line(sheet_mat, tuple_int_cast(top_point), tuple_int_cast(bottom_point), target_color, drawing_width)
+        cv2.line(sheet_mat, tuple_int_cast(left_point), tuple_int_cast(right_point), target_color, drawing_width)

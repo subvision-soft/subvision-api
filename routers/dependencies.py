@@ -1,11 +1,11 @@
 import secrets
 
 from fastapi import Header, HTTPException
-from jose import jwt, JWTError
+import jwt
 
 SECRET_KEY = secrets.token_urlsafe(32)
 ALGORITHM = "HS256"
-from datetime import datetime, timedelta
+import datetime
 TOKENS = {}
 
 def validate_token(authorization: str = Header("Authorization")):
@@ -15,8 +15,8 @@ def validate_token(authorization: str = Header("Authorization")):
             raise HTTPException(status_code=401, detail="Invalid token format")
         token = authorization[len("Bearer "):]
         jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        if token not in TOKENS or TOKENS[token] < datetime.utcnow():
+        if token not in TOKENS or TOKENS[token] < datetime.datetime.now(datetime.UTC):
             raise HTTPException(status_code=401, detail="Token expired or invalid")
-    except JWTError as e:
+    except jwt.PyJWTError as e:
         print(e)
         raise HTTPException(status_code=401, detail="Invalid token")
