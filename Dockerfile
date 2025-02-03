@@ -1,5 +1,5 @@
 # Use a compatible base image
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # Set the working directory
 WORKDIR /
@@ -8,15 +8,8 @@ WORKDIR /
 COPY ./requirements.txt /requirements.txt
 
 # Install system dependencies and PyTorch
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    && pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir torch torchvision torchaudio \
-    --index-url https://download.pytorch.org/whl/cpu \
-    && pip install --no-cache-dir -r /requirements.txt \
-    && apt-get remove -y build-essential && apt-get autoremove -y && apt-get clean
+RUN apt-get update && apt-get install -y libgl1 libglib2.0-0 \
+    && pip install --no-cache-dir -r /requirements.txt
 
 # Copy the rest of the application
 COPY ./ /
