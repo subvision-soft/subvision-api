@@ -39,7 +39,7 @@ def get_ellipses_test(folder:str):
     black_mat = np.zeros((PICTURE_HEIGHT_SHEET_DETECTION, PICTURE_WIDTH_SHEET_DETECTION, 3), np.uint8)
     for key, value in targets_ellipsis.items():
         cv2.ellipse(black_mat, value, (255, 255, 255), -1)
-    expected_mask = cv2.imread(f'../tests_ressources/{folder}/visuals_expected.jpg')
+    expected_mask = cv2.imread(f'../tests_ressources/{folder}/expected_visuals.jpg')
     expected_mask = cv2.resize(expected_mask, (PICTURE_WIDTH_SHEET_DETECTION, PICTURE_HEIGHT_SHEET_DETECTION))
     expected_mask = cv2.cvtColor(expected_mask, cv2.COLOR_BGR2GRAY)
     expected_mask = cv2.threshold(expected_mask, 127, 255, cv2.THRESH_BINARY)[1]
@@ -117,6 +117,8 @@ if __name__ == '__main__':
     # ls current directory
     print(os.listdir('../'))
     for folder in os.listdir('../tests_ressources'):
+        if folder == 'TODO':
+            continue
         # if the folder is a directory
         if os.path.isdir(f'../tests_ressources/{folder}'):
             get_ellipses_test(folder)
