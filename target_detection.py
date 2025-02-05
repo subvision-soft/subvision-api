@@ -240,7 +240,7 @@ def get_impacts_mask(image: ndarray) -> ndarray:
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     h, saturation, v = cv2.split(hsv)
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(saturation)
-    min_val = (max_val - min_val) / 1.4 + min_val
+    min_val = (max_val - min_val) / 2 + min_val
 
     lower_bound = np.array([min_val], dtype=np.uint8)
     upper_bound = np.array([max_val], dtype=np.uint8)

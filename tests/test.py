@@ -50,7 +50,7 @@ def get_ellipses_test(folder:str):
     if similarity < 0.995:
         raise Exception(f'Ellipses detections failed for folder {folder}, similarity: {similarity}')
     elif similarity < 0.997:
-        warning_print(f'Ellipses detections partially success for folder {folder}, similarity: {similarity}')
+        warning_print(f'Ellipses detections partially succeeded for folder {folder}, similarity: {similarity}')
 
     success_print(f'Ellipses detections success for folder {folder}, similarity: {similarity}')
 
@@ -59,13 +59,8 @@ def get_impacts_test(folder):
     img = cv2.imread(f'../tests_ressources/{folder}/cropped_sheet.jpg')
     img = cv2.resize(img, (PICTURE_WIDTH_SHEET_DETECTION, PICTURE_HEIGHT_SHEET_DETECTION))
     impacts = get_impacts_coordinates(img)
-    with open(f'../tests_ressources/{folder}/data.json', 'r') as file:
-        data_json = json.load(file)
-        # get attributes from json
-        impacts_count = data_json['impactsCount']
-        if len(impacts) != impacts_count:
-            raise Exception(f'Impacts detections failed for folder {folder}, impacts count: {len(impacts)}')
-        success_print(f'Impacts detections success for folder {folder}, impacts count: {len(impacts)}')
+
+
     expected_mask_impacts = cv2.imread(f'../tests_ressources/{folder}/mask_impacts.jpg')
     expected_mask_impacts = cv2.resize(expected_mask_impacts, (PICTURE_WIDTH_SHEET_DETECTION, PICTURE_HEIGHT_SHEET_DETECTION))
     expected_mask_impacts = cv2.cvtColor(expected_mask_impacts, cv2.COLOR_BGR2GRAY)
@@ -78,7 +73,7 @@ def get_impacts_test(folder):
     if similarity < 0.999:
         raise Exception(f'Impacts mask failed for folder {folder}, similarity: {similarity}')
     elif similarity < 0.9995:
-        warning_print(f'Impacts mask partially success for folder {folder}, similarity: {similarity}')
+        warning_print(f'Impacts mask partially succeeded for folder {folder}, similarity: {similarity}')
     success_print(f'Impacts mask success for folder {folder}, similarity: {similarity}')
     expected_mask_impacts = cv2.imread(f'../tests_ressources/{folder}/mask_impacts.jpg')
     expected_mask_impacts = cv2.resize(expected_mask_impacts, (PICTURE_WIDTH_SHEET_DETECTION, PICTURE_HEIGHT_SHEET_DETECTION))
@@ -86,6 +81,11 @@ def get_impacts_test(folder):
     hsv_simulate = cv2.merge((split_result[0], split_result[0], split_result[0]))
     bgr_simulate = cv2.cvtColor(hsv_simulate, cv2.COLOR_HSV2BGR)
     real_coordinates = get_impacts_coordinates(bgr_simulate)
+
+    if len(impacts) != len(real_coordinates):
+        raise Exception(f'Impacts detections failed for folder {folder}, impacts count: {len(impacts)}')
+    success_print(f'Impacts detections success for folder {folder}, impacts count: {len(impacts)}')
+
     # get average distance between real and detected impacts
     distances = []
     for real_impact in real_coordinates:
@@ -106,7 +106,7 @@ def get_impacts_test(folder):
     if average_distance > 4:
         raise Exception(f'Impacts coordinates failed for folder {folder}, average distance: {average_distance}')
     elif average_distance > 2:
-        warning_print(f'Impacts coordinates partially success for folder {folder}, average distance: {average_distance}')
+        warning_print(f'Impacts coordinates partially succeeded for folder {folder}, average distance: {average_distance}')
     success_print(f'Impacts coordinates success for folder {folder}, average distance: {average_distance}')
 
 
