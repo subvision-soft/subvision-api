@@ -48,7 +48,7 @@ class ImpactDetectionTests(unittest.TestCase):
                          f'Impacts detection failed for folder {folder}, impacts count: {len(impacts)}')
 
         distances = [min(get_distance(real, impact) for impact in impacts) for real in real_coordinates]
-        average_distance = np.mean(distances)
+        average_distance = np.mean(distances) if distances else 0
         self.assertLessEqual(average_distance, 4,
                              f'Impacts coordinates failed for folder {folder}, avg distance: {average_distance:.2f}')
 if __name__ == '__main__':
