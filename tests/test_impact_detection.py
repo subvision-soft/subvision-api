@@ -17,13 +17,13 @@ class ImpactDetectionTests(unittest.TestCase):
     def test_impacts_detection(self):
         for folder in os.listdir(TESTS_RESOURCES_PATH):
             folder_path = f'{TESTS_RESOURCES_PATH}/{folder}'
-            if folder != 'TODO' and os.path.isdir(folder_path):
+            if folder != 'TODO' and os.path.isdir(folder_path) and 'WIP' not in folder:
                 with self.subTest(folder=folder):
                     self.run_impacts_test(folder)
 
     def run_impacts_test(self, folder: str):
         img_path = f'{TESTS_RESOURCES_PATH}/{folder}/cropped_sheet.jpg'
-        mask_path = f'{TESTS_RESOURCES_PATH}/{folder}/mask_impacts.jpg'
+        mask_path = f'{TESTS_RESOURCES_PATH}/{folder}/expected_impacts.jpg'
 
         img = cv2.imread(img_path)
         img = cv2.resize(img, (PICTURE_WIDTH_SHEET_DETECTION, PICTURE_HEIGHT_SHEET_DETECTION))

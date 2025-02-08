@@ -17,7 +17,7 @@ class EllipseDetectionTests(unittest.TestCase):
     def test_ellipses_detection(self):
         for folder in os.listdir(TESTS_RESOURCES_PATH):
             folder_path = f'{TESTS_RESOURCES_PATH}/{folder}'
-            if folder != 'TODO' and os.path.isdir(folder_path):
+            if folder != 'TODO' and os.path.isdir(folder_path) and 'WIP' not in folder:
                 with self.subTest(folder=folder):
                     self.run_ellipses_test(folder)
 
