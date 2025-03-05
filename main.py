@@ -57,10 +57,10 @@ async def log_response_time(request: Request, call_next):
     response = await call_next(request)
     end_time = time.time()
 
-    endpoint = request.url.path
-    duration = end_time - start_time
-
-    response_times[endpoint].append(duration)
+    if response.status_code == 200:
+        endpoint = request.url.path
+        duration = end_time - start_time
+        response_times[endpoint].append(duration)
 
     return response
 
