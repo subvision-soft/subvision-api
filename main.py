@@ -1,11 +1,15 @@
+from collections import defaultdict, deque
 
 import uvicorn
-from fastapi import FastAPI,  Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+
+import time
+from statistics import mean
 
 from routers.dependencies import validate_token
 from routers.private import target
-from routers.public import token, news, metrics
+from routers.public import token, news
 
 app = FastAPI()
 app.add_middleware(
@@ -15,22 +19,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-MAX_RECORDS = 100
-response_times = defaultdict(lambda: deque(maxlen=MAX_RECORDS))
-
-@app.middleware("http")
-async def log_response_time(request: Request, call_next):
-    start_time = time.time()
-    response = await call_next(request)
-    end_time = time.time()
-
-    endpoint = request.url.path
-    duration = end_time - start_time
-
-    response_times[endpoint].append(duration)
-
-    return response
 
 app.include_router(
     token.router,
@@ -53,16 +41,35 @@ app.include_router(
     tags=["news"],
     responses={404: {"description": "Not found"}})
 
-app.include_router(
-    metric.router,
-    prefix="/metrics",
-        tags=["metrics"],
-    responses={404: {"description": "Not found"}},
-)
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+MAX_RECORDS = 100
+response_times = defaultdict(lambda: deque(maxlen=MAX_RECORDS))
+
+
+@app.middleware("http")
+async def log_response_time(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    end_time = time.time()
+
+    endpoint = request.url.path
+    duration = end_time - start_time
+
+    response_times[endpoint].append(duration)
+
+    return response
+
+
+@app.get("/")
+async def get_average_response_times():
+    averages = {endpoint: mean(times) for endpoint, times in response_times.items() if times}
+    return {"average_response_times": averages}
+
 
 if __name__ == "__main__":
     uvicorn.run(
