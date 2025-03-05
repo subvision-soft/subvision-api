@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from routers.dependencies import validate_token
 from routers.private import target
-from routers.public import token, news, metrics
+from routers.public import token, news, metric
 
 app = FastAPI()
 app.add_middleware(
@@ -38,7 +38,7 @@ app.include_router(
     responses={404: {"description": "Not found"}})
 
 app.include_router(
-    metrics.router,
+    metric.router,
     prefix="/metrics",
         tags=["metrics"],
     responses={404: {"description": "Not found"}},
