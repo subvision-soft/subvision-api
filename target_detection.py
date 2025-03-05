@@ -242,8 +242,8 @@ def get_impacts_mask(image: ndarray) -> ndarray:
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     h, saturation, v = cv2.split(hsv)
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(saturation)
-    min_val = (max_val - min_val) / 1.4 + min_val
-
+    max_val = max(max_val, 120)
+    min_val = (max_val - min_val) / 2 + min_val
     lower_bound = np.array([min_val], dtype=np.uint8)
     upper_bound = np.array([max_val], dtype=np.uint8)
 
@@ -293,9 +293,9 @@ def get_target_ellipse(mat) -> Ellipse:
     circle = np.zeros((mat.shape[1], mat.shape[0]), dtype=np.uint8)
     cv2.circle(circle, (mat.shape[1] // 2, mat.shape[0] // 2), int(mat.shape[1] / 2.2), (255, 255, 255), -1)
 
-    hsv = cv2.cvtColor(mat.copy(), cv2.COLOR_BGR2HSV)
-    hsv_channels = cv2.split(hsv)
-    value = hsv_channels[2]
+    xyz = cv2.cvtColor(mat.copy(), cv2.COLOR_BGR2XYZ)
+    xyz_channels = cv2.split(xyz)
+    value = xyz_channels[2]
 
     value = cv2.bitwise_not(value)
 
