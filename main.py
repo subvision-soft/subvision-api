@@ -16,6 +16,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+MAX_RECORDS = 100
+response_times = defaultdict(lambda: deque(maxlen=MAX_RECORDS))
+
+@app.middleware("http")
+async def log_response_time(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    end_time = time.time()
+
+    endpoint = request.url.path
+    duration = end_time - start_time
+
+    response_times[endpoint].append(duration)
+
+    return response
+
 app.include_router(
     token.router,
     prefix="/token",
