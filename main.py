@@ -65,7 +65,7 @@ async def log_response_time(request: Request, call_next):
     return response
 
 
-@app.get("/")
+@app.get("/metrics")
 async def get_average_response_times():
     averages = {endpoint: mean(times) for endpoint, times in response_times.items() if times}
     return {"average_response_times": averages}
