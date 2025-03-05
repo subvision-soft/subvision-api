@@ -1,14 +1,14 @@
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, Request
 import time
 from collections import defaultdict, deque
 from statistics import mean
 
-app = FastAPI()
+router = APIRouter()
 
 MAX_RECORDS = 100
 response_times = defaultdict(lambda: deque(maxlen=MAX_RECORDS))
 
-@app.middleware("http")
+@router.middleware("http")
 async def log_response_time(request: Request, call_next):
     start_time = time.time()
     response = await call_next(request)
@@ -21,7 +21,7 @@ async def log_response_time(request: Request, call_next):
 
     return response
 
-@app.get("/metrics")
+@router.get("/")
 async def get_average_response_times():
     averages = {endpoint: mean(times) for endpoint, times in response_times.items() if times}
     return {"average_response_times": averages}
