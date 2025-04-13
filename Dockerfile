@@ -14,8 +14,7 @@ RUN apt-get update && apt-get install -y libgl1 libglib2.0-0 \
 # Copy the rest of the application
 COPY ./ /
 
-# Expose port 443
-EXPOSE 443
+EXPOSE 3000
 
 # Set the command to run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "443"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3000"]
