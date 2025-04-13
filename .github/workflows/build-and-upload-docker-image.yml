@@ -12,6 +12,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      attestations: write  # Required for attestation
       id-token: write  # Required for OIDC
 
     steps:
