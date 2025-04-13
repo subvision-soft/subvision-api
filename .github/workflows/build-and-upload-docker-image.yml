@@ -1,7 +1,8 @@
-name: Create and publish the Docker image
+name: Create and publish Docker image
 
 on:
   push
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -12,8 +13,8 @@ jobs:
     permissions:
       contents: read
       packages: write
-      attestations: write  # Required for attestation
-      id-token: write  # Required for OIDC
+      attestations: write
+      id-token: write
 
     steps:
       - name: Checkout repository
@@ -37,7 +38,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        id: push  # Critical: ID needed to reference outputs
+        id: push
         uses: docker/build-push-action@v6
         with:
           context: .
